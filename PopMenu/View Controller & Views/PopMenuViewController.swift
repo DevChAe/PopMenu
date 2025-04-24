@@ -348,12 +348,12 @@ extension PopMenuViewController {
     /// - Returns: The source origin point
     fileprivate func calculateContentOrigin(with size: CGSize) -> CGPoint {
         guard let sourceFrame = absoluteSourceFrame else { return CGPoint(x: view.center.x - size.width / 2, y: view.center.y - size.height / 2) }
-        let minContentPos: CGFloat = UIScreen.main.bounds.size.width * 0.05
-        let maxContentPos: CGFloat = UIScreen.main.bounds.size.width * 0.95
+        let minContentPos: CGFloat = UIScreen.main.bounds.size.width * appearance.popMenuMinContentPosPercent
+        let maxContentPos: CGFloat = UIScreen.main.bounds.size.width * appearance.popMenuMaxContentPosPercent
         
         // Get desired content origin point
         let offsetX = (size.width - sourceFrame.size.width ) / 2
-        var desiredOrigin = CGPoint(x: sourceFrame.origin.x - offsetX, y: sourceFrame.origin.y)
+        var desiredOrigin = CGPoint(x: sourceFrame.origin.x - offsetX, y: sourceFrame.origin.y + appearance.popMenuOffsetY)
         if (desiredOrigin.x + size.width) > maxContentPos {
             desiredOrigin.x = maxContentPos - size.width
         }
@@ -374,7 +374,7 @@ extension PopMenuViewController {
     ///   - desiredOrigin: The desired origin point
     ///   - contentSize: Content size
     fileprivate func translateOverflowX(desiredOrigin: inout CGPoint, contentSize: CGSize) {
-        let edgePadding: CGFloat = 8
+        let edgePadding: CGFloat = appearance.popMenuEdgePaddingX
         // Check content in left or right side
         let leftSide = (desiredOrigin.x - view.center.x) < 0
         
@@ -400,9 +400,9 @@ extension PopMenuViewController {
         let origin = CGPoint(x: desiredOrigin.x, y: desiredOrigin.y + contentSize.height)
 
         if #available(iOS 11.0, *) {
-            edgePadding = UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? 8
+            edgePadding = UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? appearance.popMenuEdgePaddingX
         } else {
-            edgePadding = 8
+            edgePadding = appearance.popMenuEdgePaddingX
         }
         
         // Check content inside of view or not

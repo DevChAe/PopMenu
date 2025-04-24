@@ -50,7 +50,12 @@ final public class PopMenuAppearance: NSObject {
     
     /// The presentation style
     public var popMenuPresentationStyle: PopMenuPresentationStyle = .cover()
-
+    
+    public var popMenuMinContentPosPercent: CGFloat = 0.05
+    public var popMenuMaxContentPosPercent: CGFloat = 0.95
+    public var popMenuOffsetY: CGFloat = 0
+    public var popMenuEdgePaddingX: CGFloat = 8
+    public var popMenuEdgePaddingY: CGFloat = 8
 }
 
 /// Background styles for PopMenu.
