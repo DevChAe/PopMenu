@@ -57,6 +57,7 @@ final public class PopMenuAppearance: NSObject {
     public var popMenuEdgePaddingX: CGFloat = 8
     public var popMenuEdgePaddingY: CGFloat = 8
     public var popMenuShadow: (offset: CGSize, opacity: Float, radius: CGFloat, color: UIColor)?
+    public var popMenuActionPadding: UIEdgeInsets = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
 }
 
 /// Background styles for PopMenu.

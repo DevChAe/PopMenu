@@ -66,6 +66,9 @@ final public class PopMenuViewController: UIViewController {
     /// Determines whether the pan gesture is enabled on the actions.
     public var shouldEnablePanGesture: Bool = true
     
+    /// Determines whether the long press gesture is enabled on the actions.
+    public var shouldEnableLongPressGesture: Bool = true
+    
     /// Determines whether enable haptics for iPhone 7 and up.
     public var shouldEnableHaptics: Bool = true
     
@@ -102,6 +105,7 @@ final public class PopMenuViewController: UIViewController {
         let tapper = UITapGestureRecognizer(target: self, action: #selector(backgroundViewDidTap(_:)))
         tapper.cancelsTouchesInView = false
         tapper.delaysTouchesEnded = false
+        tapper.delegate = self
         
         return tapper
     }()
@@ -110,8 +114,19 @@ final public class PopMenuViewController: UIViewController {
     fileprivate lazy var panGestureForMenu: UIPanGestureRecognizer = {
         let panner = UIPanGestureRecognizer(target: self, action: #selector(menuDidPan(_:)))
         panner.maximumNumberOfTouches = 1
+        panner.delegate = self
         
         return panner
+    }()
+    
+    /// LongPress  gesture to highligh actions.
+    fileprivate lazy var longPressGestureForMenu: UILongPressGestureRecognizer = {
+        let gesture = UILongPressGestureRecognizer(target: self, action: #selector(menuDidLongPress(_:)))
+        gesture.minimumPressDuration = 0
+        gesture.cancelsTouchesInView = false
+        gesture.delegate = self
+        
+        return gesture
     }()
     
     /// Actions of menu.
@@ -407,9 +422,9 @@ extension PopMenuViewController {
         let origin = CGPoint(x: desiredOrigin.x, y: desiredOrigin.y + contentSize.height)
 
         if #available(iOS 11.0, *) {
-            edgePadding = UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? appearance.popMenuEdgePaddingX
+            edgePadding = UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? appearance.popMenuEdgePaddingY
         } else {
-            edgePadding = appearance.popMenuEdgePaddingX
+            edgePadding = appearance.popMenuEdgePaddingY
         }
         
         // Check content inside of view or not
@@ -500,14 +515,15 @@ extension PopMenuViewController {
         } else {
             // Not scrollable
             actionsView.addGestureRecognizer(panGestureForMenu)
+            actionsView.addGestureRecognizer(longPressGestureForMenu)
             
             contentView.addSubview(actionsView)
             
             NSLayoutConstraint.activate([
-                actionsView.leftAnchor.constraint(equalTo: contentView.leftAnchor),
-                actionsView.rightAnchor.constraint(equalTo: contentView.rightAnchor),
-                actionsView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
-                actionsView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4)
+                actionsView.leftAnchor.constraint(equalTo: contentView.leftAnchor, constant: appearance.popMenuActionPadding.left),
+                actionsView.rightAnchor.constraint(equalTo: contentView.rightAnchor, constant: -appearance.popMenuActionPadding.right),
+                actionsView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: appearance.popMenuActionPadding.top),
+                actionsView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -appearance.popMenuActionPadding.bottom)
             ])
         }
     }
@@ -592,6 +608,31 @@ extension PopMenuViewController {
         }
     }
     
+    /// When the long press gesture triggered in actions view.
+    @objc fileprivate func menuDidLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard shouldEnableLongPressGesture else { return }
+        
+        switch gesture.state {
+        case .began:
+            if let index = associatedActionIndex(gesture) {
+                let action = actions[index]
+                // Must not be already highlighted
+                guard !action.highlighted else { return }
+                
+                if shouldEnableHaptics {
+                    Haptic.selection.generate()
+                }
+                
+                // Highlight current action view.
+                action.highlighted = true
+                // Unhighlight other actions.
+                actions.filter { return !$0.isEqual(action) }.forEach { $0.highlighted = false }
+            }
+        default:
+            return
+        }
+    }
+    
     /// Check if touch is inside content view.
     fileprivate func touchedInsideContent(location: CGPoint) -> Bool {
         return containerView.frame.contains(location)
@@ -657,4 +698,28 @@ extension PopMenuViewController: UIViewControllerTransitioningDelegate {
         return PopMenuDismissAnimationController(sourceFrame: absoluteSourceFrame)
     }
 
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension PopMenuViewController: UIGestureRecognizerDelegate {
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+    
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer is UILongPressGestureRecognizer,
+           otherGestureRecognizer is UITapGestureRecognizer {
+            return false
+        }
+        return false
+    }
+    
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer is UITapGestureRecognizer,
+           otherGestureRecognizer is UIPanGestureRecognizer {
+            return true
+        }
+        return false
+    }
 }
