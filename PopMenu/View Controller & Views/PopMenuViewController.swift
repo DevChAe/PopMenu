@@ -260,7 +260,14 @@ extension PopMenuViewController {
     /// Setup the content view.
     fileprivate func configureContentView() {
         containerView.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addShadow(offset: .init(width: 0, height: 1), opacity: 0.5, radius: 20)
+        if let popMenuShadow = appearance.popMenuShadow {
+            containerView.addShadow(offset: popMenuShadow.offset,
+                                    opacity: popMenuShadow.opacity,
+                                    radius: popMenuShadow.radius,
+                                    color: popMenuShadow.color)
+        } else {
+            containerView.addShadow(offset: .init(width: 0, height: 1), opacity: 0.5, radius: 20)
+        }
         containerView.layer.cornerRadius = appearance.popMenuCornerRadius
         containerView.backgroundColor = .clear
         
