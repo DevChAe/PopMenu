@@ -297,7 +297,7 @@ extension PopMenuViewController {
         if colors.count > 0 {
             if colors.count == 1 {
                 // Configure solid fill background.
-                contentView.backgroundColor = colors.first?.withAlphaComponent(0.9)
+                contentView.backgroundColor = colors.first?.withAlphaComponent(appearance.popMenuColor.backgroundColor.solidColorOpacity)
                 contentView.startColor = .clear
                 contentView.endColor = .clear
             } else {
@@ -308,7 +308,8 @@ extension PopMenuViewController {
                 contentView.gradientLayer.opacity = 0.8
             }
         }
-
+        
+        blurOverlayView.isHidden = appearance.popMenuBlurOverlayViewHidden
         containerView.addSubview(blurOverlayView)
         containerView.addSubview(contentView)
         
@@ -370,8 +371,8 @@ extension PopMenuViewController {
     /// - Returns: The source origin point
     fileprivate func calculateContentOrigin(with size: CGSize) -> CGPoint {
         guard let sourceFrame = absoluteSourceFrame else { return CGPoint(x: view.center.x - size.width / 2, y: view.center.y - size.height / 2) }
-        let minContentPos: CGFloat = UIScreen.main.bounds.size.width * appearance.popMenuMinContentPosPercent
-        let maxContentPos: CGFloat = UIScreen.main.bounds.size.width * appearance.popMenuMaxContentPosPercent
+        let minContentPos: CGFloat = UIScreen.main.bounds.size.width * appearance.popMenuMinContentPosPercent + appearance.popMenuEdgePaddingX
+        let maxContentPos: CGFloat = UIScreen.main.bounds.size.width * appearance.popMenuMaxContentPosPercent - appearance.popMenuEdgePaddingX
         
         // Get desired content origin point
         let offsetX = (size.width - sourceFrame.size.width ) / 2
@@ -405,9 +406,14 @@ extension PopMenuViewController {
         
         // Move accordingly
         if !view.frame.contains(origin) {
-            let overflowX: CGFloat = (leftSide ? 1 : -1) * ((leftSide ? view.frame.origin.x : view.frame.origin.x + view.frame.size.width) - origin.x) + edgePadding
-            
-            desiredOrigin = CGPoint(x: desiredOrigin.x - (leftSide ? -1 : 1) * overflowX, y: origin.y)
+            let overflowX: CGFloat
+            if leftSide {
+                overflowX = origin.x - view.frame.minX + edgePadding
+                desiredOrigin.x -= overflowX
+            } else {
+                overflowX = origin.x - view.frame.maxX + edgePadding
+                desiredOrigin.x -= overflowX
+            }
         }
     }
     
@@ -418,20 +424,20 @@ extension PopMenuViewController {
     ///   - contentSize: Content size
     fileprivate func translateOverflowY(desiredOrigin: inout CGPoint, contentSize: CGSize) {
         let edgePadding: CGFloat
-
-        let origin = CGPoint(x: desiredOrigin.x, y: desiredOrigin.y + contentSize.height)
+        let bottomSafeArea: CGFloat
 
         if #available(iOS 11.0, *) {
-            edgePadding = UIApplication.shared.keyWindow?.safeAreaInsets.bottom ?? appearance.popMenuEdgePaddingY
+            bottomSafeArea = UIApplication.shared.windows.first { $0.isKeyWindow }?.safeAreaInsets.bottom ?? appearance.popMenuEdgePaddingY
         } else {
-            edgePadding = appearance.popMenuEdgePaddingY
+            bottomSafeArea = appearance.popMenuEdgePaddingY
         }
-        
-        // Check content inside of view or not
-        if !view.frame.contains(origin) {
-            let overFlowY: CGFloat = origin.y - view.frame.size.height + edgePadding
-            
-            desiredOrigin = CGPoint(x: desiredOrigin.x, y: desiredOrigin.y - overFlowY)
+
+        let originY = desiredOrigin.y + contentSize.height
+        let maxAllowedY = view.frame.maxY - bottomSafeArea
+
+        if originY > maxAllowedY {
+            let overflowY = originY - maxAllowedY
+            desiredOrigin.y -= overflowY
         }
     }
     

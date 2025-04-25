@@ -58,6 +58,7 @@ final public class PopMenuAppearance: NSObject {
     public var popMenuEdgePaddingY: CGFloat = 8
     public var popMenuShadow: (offset: CGSize, opacity: Float, radius: CGFloat, color: UIColor)?
     public var popMenuActionPadding: UIEdgeInsets = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
+    public var popMenuBlurOverlayViewHidden = false
 }
 
 /// Background styles for PopMenu.
@@ -127,6 +128,8 @@ public struct PopMenuActionBackgroundColor {
     
     /// All colors (only one if solid color, or else it's gradient)
     public let colors: [Color]
+    
+    public var solidColorOpacity: CGFloat = 0.9
     
     /// Fill an only solid color into the colors palette.
     public static func solid(fill color: Color) -> PopMenuActionBackgroundColor {
