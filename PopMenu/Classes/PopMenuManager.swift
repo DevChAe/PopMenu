@@ -107,9 +107,21 @@ extension PopMenuManager {
     
     /// Get top view controller in window.
     fileprivate class func getTopViewControllerInWindow() -> UIViewController? {
-        guard let window = UIApplication.shared.keyWindow else { return nil }
-        
+        guard let window = keyWindow() else { return nil }
+
         return topViewControllerWithRootViewController(rootViewController: window.rootViewController)
+    }
+
+    /// Key window of the active scene (multi-scene / dual-screen safe).
+    fileprivate class func keyWindow() -> UIWindow? {
+        if #available(iOS 13.0, *) {
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first { $0.activationState == .foregroundInactive }
+            if let window = scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first {
+                return window
+            }
+        }
+        return UIApplication.shared.keyWindow
     }
     
     /// Get top view controller.

@@ -21,3 +21,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 }
 
+
+/// Scene lifecycle (required on recent iOS). The window comes from Main.storyboard.
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+
+    var window: UIWindow?
+
+}

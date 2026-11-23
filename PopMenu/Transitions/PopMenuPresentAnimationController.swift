@@ -31,7 +31,9 @@ final public class PopMenuPresentAnimationController: NSObject, UIViewController
         let view = menuViewController.view!
         view.frame = containerView.frame
         containerView.addSubview(view)
-        
+        // Lay out now so the menu's content frame uses the real window size.
+        view.layoutIfNeeded()
+
         prepareAnimation(menuViewController)
         
         let animationDuration = transitionDuration(using: transitionContext)
