@@ -82,23 +82,46 @@ final public class PopMenuViewController: UIViewController {
     private(set) var contentWidthConstraint: NSLayoutConstraint!
     private(set) var contentHeightConstraint: NSLayoutConstraint!
     
+    /// The last source view that was successfully resolved.
+    /// Kept so a temporarily unavailable bar button view does not drop the anchor.
+    private weak var lastResolvedSourceView: UIView?
+
     /// The UIView instance of source view.
-    fileprivate lazy var sourceViewAsUIView: UIView? = {
+    /// Resolved on every access: the view of a bar button item can change
+    /// (e.g. the system moves it when the window layout changes).
+    fileprivate var sourceViewAsUIView: UIView? {
         guard let sourceView = sourceView else { return nil }
-        
-        // Check if UIBarButtonItem
-        if let sourceBarButtonItem = sourceView as? UIBarButtonItem {
-            if let buttonView = sourceBarButtonItem.value(forKey: "view") as? UIView {
-                return buttonView
+
+        var resolved: UIView?
+
+        if let view = sourceView as? UIView {
+            resolved = view
+        } else if let item = sourceView as? UIBarButtonItem {
+            if let customView = item.customView {
+                resolved = customView
+            } else if item.responds(to: NSSelectorFromString("view")),
+                let buttonView = item.value(forKey: "view") as? UIView,
+                buttonView.window != nil {
+                // Private KVC: only used when there is no public way to get the view.
+                resolved = buttonView
             }
         }
-        
-        if let sourceView = sourceView as? UIView {
-            return sourceView
+
+        if let resolved = resolved {
+            lastResolvedSourceView = resolved
+            return resolved
         }
-        
-        return nil
-    }()
+
+        return lastResolvedSourceView
+    }
+
+    /// Safe area insets of the menu's view (zero before iOS 11).
+    fileprivate var safeInsets: UIEdgeInsets {
+        if #available(iOS 11.0, *) {
+            return view.safeAreaInsets
+        }
+        return .zero
+    }
     
     /// Tap gesture to dismiss for background view.
     fileprivate lazy var tapGestureForDismissal: UITapGestureRecognizer = {
@@ -136,7 +159,8 @@ final public class PopMenuViewController: UIViewController {
     /// Based on the current view (window) size instead of the screen,
     /// so it stays correct in split view, slide over and dual-screen spanning.
     fileprivate var maxContentWidth: CGFloat {
-        return view.bounds.size.width * 0.9
+        let insets = safeInsets
+        return (view.bounds.size.width - insets.left - insets.right) * 0.9
     }
     
     // MARK: - View Life Cycle
@@ -225,16 +249,26 @@ final public class PopMenuViewController: UIViewController {
     /// The view size the content frame was last calculated for.
     private var lastLayoutSize: CGSize = .zero
 
+    /// The safe area insets the content frame was last calculated for.
+    private var lastSafeInsets: UIEdgeInsets = .zero
+
     /// The view has no real size while it is loading, so the content frame is
-    /// (re)calculated here once the actual size is known and whenever it changes.
+    /// (re)calculated here once the actual size is known and whenever the size,
+    /// the safe area or the position of the source view changes.
     public override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
         let size = view.bounds.size
-        guard size != .zero, size != lastLayoutSize else { return }
-        lastLayoutSize = size
+        guard size != .zero else { return }
 
+        let previousSourceFrame = absoluteSourceFrame
         setAbsoluteSourceFrame()
+
+        let insets = safeInsets
+        guard size != lastLayoutSize || insets != lastSafeInsets || absoluteSourceFrame != previousSourceFrame else { return }
+        lastLayoutSize = size
+        lastSafeInsets = insets
+
         contentFrame = calculateContentFittingFrame()
         setupContentConstraints()
     }
@@ -410,12 +444,30 @@ extension PopMenuViewController {
     /// - Returns: The source origin point
     fileprivate func calculateContentOrigin(with size: CGSize) -> CGPoint {
         guard let sourceFrame = absoluteSourceFrame else { return CGPoint(x: view.bounds.midX - size.width / 2, y: view.bounds.midY - size.height / 2) }
-        let minContentPos: CGFloat = view.bounds.size.width * appearance.popMenuMinContentPosPercent + appearance.popMenuEdgePaddingX
-        let maxContentPos: CGFloat = view.bounds.size.width * appearance.popMenuMaxContentPosPercent - appearance.popMenuEdgePaddingX
-        
+        let boundsWidth = view.bounds.size.width
+        let insets = safeInsets
+        // Keep out of the safe area sides (e.g. the status strip of a closed iPhone Duo).
+        // With zero insets this equals the plain percentage based limits.
+        // An anchor inside the right safe area (a bar button the system moved next to the
+        // status strip) is handled like any other anchor: the menu opens over the button.
+        // So the safe area must not push the menu away from it.
+        let anchoredInRightSafeArea = insets.right > 0 && sourceFrame.midX >= view.bounds.maxX - insets.right
+        let rightInset: CGFloat = anchoredInRightSafeArea ? 0 : insets.right
+
+        // The percentage limits keep the menu off the edges, but they must not pull it away
+        // from its own anchor: the menu may always reach the anchor's left/right edge
+        // (never beyond the hard edges of the usable area).
+        let hardMin: CGFloat = insets.left + appearance.popMenuEdgePaddingX
+        let hardMax: CGFloat = boundsWidth - rightInset - appearance.popMenuEdgePaddingX
+        let percentMin: CGFloat = insets.left + boundsWidth * appearance.popMenuMinContentPosPercent + appearance.popMenuEdgePaddingX
+        let percentMax: CGFloat = (boundsWidth - rightInset) - boundsWidth * (1 - appearance.popMenuMaxContentPosPercent) - appearance.popMenuEdgePaddingX
+        let minContentPos: CGFloat = min(percentMin, max(sourceFrame.minX, hardMin))
+        let maxContentPos: CGFloat = max(percentMax, min(sourceFrame.maxX, hardMax))
+        let originY = sourceFrame.origin.y + appearance.popMenuOffsetY
+
         // Get desired content origin point
         let offsetX = (size.width - sourceFrame.size.width ) / 2
-        var desiredOrigin = CGPoint(x: sourceFrame.origin.x - offsetX, y: sourceFrame.origin.y + appearance.popMenuOffsetY)
+        var desiredOrigin = CGPoint(x: sourceFrame.origin.x - offsetX, y: originY)
         if (desiredOrigin.x + size.width) > maxContentPos {
             desiredOrigin.x = maxContentPos - size.width
         }
@@ -424,7 +476,7 @@ extension PopMenuViewController {
         }
         
         // Move content in place
-        translateOverflowX(desiredOrigin: &desiredOrigin, contentSize: size)
+        translateOverflowX(desiredOrigin: &desiredOrigin, contentSize: size, rightInset: rightInset)
         translateOverflowY(desiredOrigin: &desiredOrigin, contentSize: size)
         
         return desiredOrigin
@@ -435,24 +487,21 @@ extension PopMenuViewController {
     /// - Parameters:
     ///   - desiredOrigin: The desired origin point
     ///   - contentSize: Content size
-    fileprivate func translateOverflowX(desiredOrigin: inout CGPoint, contentSize: CGSize) {
+    ///   - rightInset: The right safe area to keep out of
+    fileprivate func translateOverflowX(desiredOrigin: inout CGPoint, contentSize: CGSize, rightInset: CGFloat) {
         let edgePadding: CGFloat = appearance.popMenuEdgePaddingX
-        // Check content in left or right side
-        let leftSide = (desiredOrigin.x - view.bounds.midX) < 0
-        
-        // Check view overflow
-        let origin = CGPoint(x: leftSide ? desiredOrigin.x : desiredOrigin.x + contentSize.width, y: desiredOrigin.y)
-        
-        // Move accordingly
-        if !view.bounds.contains(origin) {
-            let overflowX: CGFloat
-            if leftSide {
-                overflowX = origin.x - view.bounds.minX + edgePadding
-                desiredOrigin.x -= overflowX
-            } else {
-                overflowX = origin.x - view.bounds.maxX + edgePadding
-                desiredOrigin.x -= overflowX
-            }
+        let insets = safeInsets
+
+        // Usable horizontal range: the view minus the safe area sides.
+        let minX = view.bounds.minX + insets.left + edgePadding
+        let maxX = view.bounds.maxX - rightInset - edgePadding - contentSize.width
+
+        // Move into the range (the left side wins if the content is wider than it).
+        if desiredOrigin.x > maxX {
+            desiredOrigin.x = maxX
+        }
+        if desiredOrigin.x < minX {
+            desiredOrigin.x = minX
         }
     }
     
